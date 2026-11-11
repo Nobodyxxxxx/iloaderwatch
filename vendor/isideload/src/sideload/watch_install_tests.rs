@@ -41,9 +41,9 @@ fn only_known_coordinator_conflicts_are_retryable() {
 
 #[test]
 fn coordinator_error_is_found_through_report_context() {
-    let error = report!("Error Domain=IXErrorDomain Code=48").context("Watch transfer failed");
+    let error: Report = report!("Error Domain=IXErrorDomain Code=48").context("Watch transfer failed").into();
     assert!(is_watch_coordinator_conflict(&error));
-    let signing_error = report!("signature verification failed").context("Watch transfer failed");
+    let signing_error: Report = report!("signature verification failed").context("Watch transfer failed").into();
     assert!(!is_watch_coordinator_conflict(&signing_error));
 }
 

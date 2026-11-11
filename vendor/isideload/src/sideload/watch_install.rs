@@ -824,7 +824,7 @@ async fn start_watch_forward(
         // The command might have succeeded device-side before its reply was lost.
         stop_watch_forward(provider, remote_port).await;
     }
-    result.map_err(Error::IdeviceError).context("Failed to start Watch service forwarding")
+    Ok(result.map_err(Error::IdeviceError).context("Failed to start Watch service forwarding")?)
 }
 
 async fn stop_watch_forward(provider: &impl IdeviceProvider, remote_port: u16) {
@@ -852,7 +852,7 @@ async fn start_watch_forward_rsd(
     if result.is_err() {
         stop_watch_forward_rsd(provider, handshake, remote_port).await;
     }
-    result.map_err(Error::IdeviceError).context("Failed to start Watch RSD service forwarding")
+    Ok(result.map_err(Error::IdeviceError).context("Failed to start Watch RSD service forwarding")?)
 }
 
 async fn stop_watch_forward_rsd(
