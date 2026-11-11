@@ -1,7 +1,7 @@
 use crate::dev::{
     app_ids::AppId,
     developer_session::DeveloperSession,
-    device_type::{DeveloperDeviceType, dev_url},
+    device_type::{DeveloperDeviceType, dev_request},
     normalize_app_names,
     teams::DeveloperTeam,
 };
@@ -32,10 +32,12 @@ pub trait AppGroupsApi {
             "teamId": &team.team_id,
         });
 
+        let (url, body) = dev_request("listApplicationGroups", device_type, body);
+
         let app_groups: Vec<AppGroup> = self
             .developer_session()
             .send_dev_request(
-                &dev_url("listApplicationGroups", device_type),
+                &url,
                 body,
                 "applicationGroupList",
             )
@@ -58,10 +60,12 @@ pub trait AppGroupsApi {
             "identifier": identifier,
         });
 
+        let (url, body) = dev_request("addApplicationGroup", device_type, body);
+
         let app_group: AppGroup = self
             .developer_session()
             .send_dev_request(
-                &dev_url("addApplicationGroup", device_type),
+                &url,
                 body,
                 "applicationGroup",
             )
@@ -84,9 +88,11 @@ pub trait AppGroupsApi {
             "appIdId": &app_id.app_id_id,
         });
 
+        let (url, body) = dev_request("assignApplicationGroupToAppId", device_type, body);
+
         self.developer_session()
             .send_dev_request_no_response(
-                &dev_url("assignApplicationGroupToAppId", device_type),
+                &url,
                 body,
             )
             .await
@@ -111,8 +117,10 @@ pub trait AppGroupsApi {
         body.insert("applicationGroups".to_string(), plist::Value::Array(
             app_groups.iter().map(|group| plist::Value::String(group.application_group.clone())).collect()
         ));
+        let (url, body) = dev_request("assignApplicationGroupToAppId", device_type, body);
+
         self.developer_session()
-            .send_dev_request_no_response(&dev_url("assignApplicationGroupToAppId", device_type), body)
+            .send_dev_request_no_response(&url, body)
             .await
             .context("Failed to assign complete developer app group set")?;
         Ok(())

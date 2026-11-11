@@ -1,7 +1,7 @@
 use crate::{
     dev::{
         developer_session::DeveloperSession,
-        device_type::{DeveloperDeviceType, dev_url},
+        device_type::{DeveloperDeviceType, dev_request},
         normalize_app_names,
         teams::DeveloperTeam,
     },
@@ -70,9 +70,11 @@ pub trait AppIdsApi {
             "name": normalize_app_names(name),
         });
 
+        let (url, body) = dev_request("addAppId", device_type, body);
+
         let app_id: AppId = self
             .developer_session()
-            .send_dev_request(&dev_url("addAppId", device_type), body, "appId")
+            .send_dev_request(&url, body, "appId")
             .await
             .context("Failed to add developer app ID")?;
 
@@ -88,9 +90,11 @@ pub trait AppIdsApi {
             "teamId": &team.team_id,
         });
 
+        let (url, body) = dev_request("listAppIds", device_type, body);
+
         let response: Value = self
             .developer_session()
-            .send_dev_request_no_response(&dev_url("listAppIds", device_type), body)
+            .send_dev_request_no_response(&url, body)
             .await
             .context("Failed to list developer app IDs")?
             .into();
@@ -125,9 +129,11 @@ pub trait AppIdsApi {
             body.insert(key.clone(), value.clone());
         }
 
+        let (url, body) = dev_request("updateAppId", device_type, body);
+
         Ok(self
             .developer_session()
-            .send_dev_request(&dev_url("updateAppId", device_type), body, "appId")
+            .send_dev_request(&url, body, "appId")
             .await
             .context("Failed to update developer app ID")?)
     }
@@ -143,8 +149,10 @@ pub trait AppIdsApi {
             "appIdId": app_id_id,
         });
 
+        let (url, body) = dev_request("deleteAppId", device_type, body);
+
         self.developer_session()
-            .send_dev_request_no_response(&dev_url("deleteAppId", device_type), body)
+            .send_dev_request_no_response(&url, body)
             .await
             .context("Failed to delete developer app ID")?;
 
@@ -162,10 +170,12 @@ pub trait AppIdsApi {
             "appIdId": &app_id.app_id_id,
         });
 
+        let (url, body) = dev_request("downloadTeamProvisioningProfile", device_type, body);
+
         let response: Profile = self
             .developer_session()
             .send_dev_request(
-                &dev_url("downloadTeamProvisioningProfile", device_type),
+                &url,
                 body,
                 "provisioningProfile",
             )

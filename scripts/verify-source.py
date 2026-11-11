@@ -39,6 +39,13 @@ for required in ['ExtensionsBehavior::ReuseMain', 'ExtensionsBehavior::RegisterA
     require(required in policy, f'extension profile policy lost: {required}')
 for required in ['ExtensionsBehaviorSelection', 'pairing_file', 'device_udid']:
     require(required in sign, f'new signing behavior lost: {required}')
+platform_source = read('vendor/isideload/src/dev/device_type.rs')
+require('DeveloperDeviceType::Watchos => "ios/"' in platform_source, 'Watch developer service URL is not the iOS namespace')
+require('DTDK_Platform' in platform_source, 'Watch platform body marker missing')
+for name, calls in [('devices.rs', 2), ('app_ids.rs', 5), ('app_groups.rs', 4)]:
+    source = read('vendor/isideload/src/dev/' + name)
+    require('dev_url(' not in source, f'platform body builder bypassed in {name}')
+    require(source.count('= dev_request(') == calls, f'platform request coverage changed in {name}')
 require(not (ROOT / 'src-tauri/src/renewal').exists(), 'old renewal system imported')
 require(not (ROOT / 'src-tauri/src/renewal_commands.rs').exists(), 'old renewal commands imported')
 print(json.dumps({'sourceGuards':'passed', 'compiled':False, 'hardwareTested':False,

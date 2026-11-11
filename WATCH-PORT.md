@@ -4,6 +4,14 @@
 
 Base: iloader **2.4.1**, with incremental local changes to **isideload 0.5.2** and pinned **idevice 0.1.68**. This is not the old 2.3.4 fork with a new filename.
 
+## Watch developer API fix 1 (2026-11-11)
+
+The first compiled build (`c8ad22cb97f0`) incorrectly used the non-existent `QH65B2/watchos/` route and omitted the Watch platform body field. A user reported HTTP 404 at `watchos/listDevices.action`; this is an integration bug, not evidence that a free Apple account was rejected.
+
+Fix 1 routes Watch device/App-ID/profile/app-group operations through `QH65B2/ios/` with `DTDK_Platform=watchos` in the XML plist body. Eleven typed call sites share one URL/body constructor. Regression tests cover the exact routes, serialized Watch field, preservation of device IDs/groups, and unchanged default iOS/tvOS/Any behavior. No identity, profile or entitlement is relabeled as iOS merely to bypass an error. App data/credential namespaces remain unchanged, so updating the EXE does not require deleting the phone or Watch app.
+
+This fix removes the identified request-format defect; actual Apple authorization and device installation still require verification. Do not uninstall HermesEnabler or reset its backup to resolve this HTTP 404.
+
 ## Verification status
 
 Until a successful Windows Actions run produces an executable, this repository is **work in progress, not a compiled deliverable**. Source-guard checks are not compilation. The generated BUILD.json distinguishes a failed build from a compiled-and-unit-tested build.

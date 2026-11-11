@@ -2,7 +2,7 @@ use crate::{
     SideloadError,
     dev::{
         developer_session::DeveloperSession,
-        device_type::{DeveloperDeviceType, dev_url},
+        device_type::{DeveloperDeviceType, dev_request},
         teams::DeveloperTeam,
     },
 };
@@ -34,9 +34,11 @@ pub trait DevicesApi {
             "teamId": &team.team_id,
         });
 
+        let (url, body) = dev_request("listDevices", device_type, body);
+
         let devices: Vec<DeveloperDevice> = self
             .developer_session()
-            .send_dev_request(&dev_url("listDevices", device_type), body, "devices")
+            .send_dev_request(&url, body, "devices")
             .await
             .context("Failed to list developer devices")?;
 
@@ -56,9 +58,11 @@ pub trait DevicesApi {
             "deviceNumber": udid,
         });
 
+        let (url, body) = dev_request("addDevice", device_type, body);
+
         let device: DeveloperDevice = self
             .developer_session()
-            .send_dev_request(&dev_url("addDevice", device_type), body, "device")
+            .send_dev_request(&url, body, "device")
             .await
             .context("Failed to add developer device")?;
 
