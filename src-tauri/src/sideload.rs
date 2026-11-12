@@ -113,6 +113,7 @@ async fn sideload_watch(
     let watches = transport.paired_watch_udids(&device.info.udid).await?;
 
     let team = sideloader.get_team().await?;
+    let expected_team_id = team.team_id.clone();
     sideloader.get_dev_session().ensure_device_registered(
         &team, &device.info.name, &device.info.udid, None::<DeveloperDeviceType>,
     ).await?;
@@ -138,6 +139,12 @@ async fn sideload_watch(
             "Signing removed the embedded Watch app; neither device was installed".into(),
         ));
     }
+
+    // Check the signed profile bytes without changing them. This catches a
+    // phone-only or stale device list before even installing the iPhone part.
+    isideload::sideload::watch_profile::validate_install_profiles(
+        signed_bundle.watch_apps(), &watches, Some(&expected_team_id),
+    )?;
 
     // The iPhone install must complete before any Watch upload. Do not retry an
     // indeterminate phone install or uninstall an existing app on either device.

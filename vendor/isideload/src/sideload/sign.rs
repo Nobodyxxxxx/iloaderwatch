@@ -85,7 +85,7 @@ where
         let (_, profile, _) = all_profiles.iter().find(|(candidate, _, _)| candidate == &id)
             .ok_or_else(|| report!("Explicit watchOS provisioning profile required for {}", id))?;
         let parsed = ProvisioningProfile::parse(profile.encoded_profile.as_ref())?;
-        required::validate_watch_profile(parsed.plist(), &id)?;
+        required::validate_watch_profile(parsed.plist(), &id, Some(&team.team_id))?;
     }
     let profile = ProvisioningProfile::parse(main_provisioning_profile.encoded_profile.as_ref())?;
     let certificate_chain = cert_identity.profile_to_certificate_chain(&profile)?;

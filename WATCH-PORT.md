@@ -12,6 +12,16 @@ Fix 1 routes Watch device/App-ID/profile/app-group operations through `QH65B2/io
 
 This fix removes the identified request-format defect; actual Apple authorization and device installation still require verification. Do not uninstall HermesEnabler or reset its backup to resolve this HTTP 404.
 
+## Watch profile fix 2 (2026-11-12)
+
+The first API fix progressed past HTTP 404, but our added guard then rejected any serialized `Platform` list without the literal `watchOS`. This local error did not establish that Apple had rejected the account or that a usable Watch profile had been issued. The error did not report the actual list value.
+
+Apple's [development-profile documentation](https://developer.apple.com/help/account/provisioning-profiles/create-a-development-provisioning-profile/) groups iOS and watchOS under `iOS App Development`. [TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles) also states these profile internals are not API. Do not use a family label alone as proof of either a valid or invalid Watch authorization.
+
+Fix 2 accepts iOS-family or explicit watchOS metadata only with exact Watch bundle identity. It verifies the selected team and profile App ID prefix, rejects phone/wildcard identities and incompatible tvOS/macOS metadata, and checks the unmodified embedded `ProvisionedDevices` against actual paired Watches before phone upload. The Watch transport repeats device authorization after authenticating the active Watch's own `UniqueDeviceID`, before starting the Watch zip upload. Registry preflight alone is not proof of which paired Watch is active. Missing or mismatched device authorization fails closed without logging raw profiles or UDIDs.
+
+No CMS bytes, entitlements, Bundle ID, developer account, pairing record, data directory or credential namespace is rewritten to bypass this check. A profile that really does not authorize the active Watch will still be rejected with a more specific error. No successful free-account or hardware installation is claimed.
+
 ## Verification status
 
 Until a successful Windows Actions run produces an executable, this repository is **work in progress, not a compiled deliverable**. Source-guard checks are not compilation. The generated BUILD.json distinguishes a failed build from a compiled-and-unit-tested build.

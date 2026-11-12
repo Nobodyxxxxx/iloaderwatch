@@ -85,6 +85,19 @@ pub async fn install_watch_apps(
             .map_err(Error::IdeviceError)
             .context("Failed to start Apple Watch lockdown session")?;
 
+        // A platform label is not proof that this profile authorizes the Watch
+        // actually selected by CompanionProxy. Validate its authenticated UDID
+        // before starting any zip service/upload; never substitute the phone ID.
+        let identity = watch_io_for(WATCH_IO_TIMEOUT,
+            watch_lockdown.get_value(Some("UniqueDeviceID"), None)).await
+            .map_err(Error::IdeviceError)
+            .context("Failed to read the authenticated Watch identity before profile validation")?;
+        let watch_udid = identity.as_string().filter(|id| !id.trim().is_empty())
+            .ok_or_else(|| report!("Authenticated Watch did not report a usable device identity"))?;
+        super::watch_profile::validate_install_profiles(
+            watch_apps, &[watch_udid.to_string()], None,
+        ).context("Provisioning profile does not authorize the active paired Watch; no Watch app bytes were uploaded")?;
+
         for watch_app in watch_apps {
             install_watch_app_with_retry(
                 device_provider,
@@ -146,6 +159,19 @@ pub async fn install_watch_apps_rsd(
             .await
             .map_err(Error::IdeviceError)
             .context("Failed to start Apple Watch lockdown session over RSD")?;
+
+        // A platform label is not proof that this profile authorizes the Watch
+        // actually selected by CompanionProxy. Validate its authenticated UDID
+        // before starting any zip service/upload; never substitute the phone ID.
+        let identity = watch_io_for(WATCH_IO_TIMEOUT,
+            watch_lockdown.get_value(Some("UniqueDeviceID"), None)).await
+            .map_err(Error::IdeviceError)
+            .context("Failed to read the authenticated Watch identity before profile validation")?;
+        let watch_udid = identity.as_string().filter(|id| !id.trim().is_empty())
+            .ok_or_else(|| report!("Authenticated Watch did not report a usable device identity"))?;
+        super::watch_profile::validate_install_profiles(
+            watch_apps, &[watch_udid.to_string()], None,
+        ).context("Provisioning profile does not authorize the active paired Watch; no Watch app bytes were uploaded")?;
 
         for watch_app in watch_apps {
             install_watch_app_with_retry_rsd(

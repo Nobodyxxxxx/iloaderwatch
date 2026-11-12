@@ -184,12 +184,14 @@ mod tests {
         let mut profile = Dictionary::new();
         profile.insert("Entitlements".into(), Value::Dictionary(entitlements.clone()));
         profile.insert("Platform".into(), Value::Array(vec!["iOS".into()]));
-        assert!(validate_watch_profile(&profile, "com.phone.watch").is_err());
+        assert!(validate_watch_profile(&profile, "com.phone.watch", None).is_err());
         entitlements.insert("application-identifier".into(), "TEAM.com.phone.watch".into());
         profile.insert("Entitlements".into(), Value::Dictionary(entitlements));
-        assert!(validate_watch_profile(&profile, "com.phone.watch").is_err());
+        // An iOS family label alone is not evidence of phone-profile reuse.
+        // Upload additionally requires the actual paired Watch in ProvisionedDevices.
+        assert!(validate_watch_profile(&profile, "com.phone.watch", None).is_ok());
         profile.insert("Platform".into(), Value::Array(vec!["watchOS".into()]));
-        assert!(validate_watch_profile(&profile, "com.phone.watch").is_ok());
+        assert!(validate_watch_profile(&profile, "com.phone.watch", None).is_ok());
     }
 
     #[test]
@@ -236,20 +238,12 @@ pub(super) fn merge(profile: &Dictionary, required: &Dictionary, bundle_id: &str
     Ok(merged)
 }
 
-/// Profiles fetched from watchOS endpoints must belong to this explicit Watch app ID.
-pub(super) fn validate_watch_profile(profile: &Dictionary, bundle_id: &str) -> Result<(), Report> {
-    let id = profile.get("Entitlements").and_then(Value::as_dictionary)
-        .and_then(|entitlements| entitlements.get("application-identifier"))
-        .and_then(Value::as_string)
-        .ok_or_else(|| report!("Watch profile for {} lacks application-identifier", bundle_id))?;
-    if !id.ends_with(&format!(".{}", bundle_id)) {
-        bail!("Watch profile for {} has a different application-identifier {}; refusing phone-profile reuse", bundle_id, id);
-    }
-    if let Some(platforms) = profile.get("Platform") {
-        if !platforms.as_array().is_some_and(|platforms| platforms.iter().any(|platform|
-            platform.as_string().is_some_and(|platform| platform.eq_ignore_ascii_case("watchos")))) {
-            bail!("Provisioning profile for {} is not a watchOS profile", bundle_id);
-        }
-    }
-    Ok(())
+/// Validate an explicit Watch target without confusing a profile family label
+/// with the Watch SDK. Device authorization is checked separately before upload.
+pub(super) fn validate_watch_profile(
+    profile: &Dictionary,
+    bundle_id: &str,
+    expected_team: Option<&str>,
+) -> Result<(), Report> {
+    super::super::watch_profile::validate_identity(profile, bundle_id, expected_team)
 }
