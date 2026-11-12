@@ -183,6 +183,7 @@ mod tests {
         entitlements.insert("application-identifier".into(), "TEAM.com.phone".into());
         let mut profile = Dictionary::new();
         profile.insert("Entitlements".into(), Value::Dictionary(entitlements.clone()));
+        profile.insert("ApplicationIdentifierPrefix".into(), Value::Array(vec!["TEAM".into()]));
         profile.insert("Platform".into(), Value::Array(vec!["iOS".into()]));
         assert!(validate_watch_profile(&profile, "com.phone.watch", None).is_err());
         entitlements.insert("application-identifier".into(), "TEAM.com.phone.watch".into());

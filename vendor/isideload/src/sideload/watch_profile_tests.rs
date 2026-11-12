@@ -100,6 +100,18 @@ fn app_id_prefix_team_and_entitlement_team_are_checked_independently() {
     assert!(validate(&p, "com.phone.watch", &["WATCH-A"]).is_err());
 }
 #[test]
+fn missing_or_malformed_prefix_is_rejected_even_when_team_and_device_match() {
+    let mut p = profile(platforms(&["iOS"]), "com.phone.watch", &["WATCH-A"]);
+    p.remove("ApplicationIdentifierPrefix");
+    assert!(validate(&p, "com.phone.watch", &["WATCH-A"]).is_err());
+    for prefix in [Value::Array(vec![]), Value::String("PREFIX".into()),
+                   Value::Array(vec!["PREFIX".into(), Value::Boolean(true)])] {
+        p.insert("ApplicationIdentifierPrefix".into(), prefix);
+        assert!(validate(&p, "com.phone.watch", &["WATCH-A"]).is_err());
+    }
+}
+
+#[test]
 fn wildcard_or_suffix_collision_cannot_match_a_watch_identity() {
     for id in ["com.phone.*", "extra.com.phone.watch", "com.phone.watch.more"] {
         let p = profile(platforms(&["iOS"]), id, &["WATCH-A"]);

@@ -23,11 +23,12 @@ pub(crate) fn validate_identity(
     if prefix.is_empty() || suffix != bundle_id || identifier.contains('*') {
         bail!("Watch profile bundle identity does not match {}; refusing phone-profile reuse", bundle_id);
     }
-    if let Some(prefixes) = profile.get("ApplicationIdentifierPrefix") {
-        if !prefixes.as_array().is_some_and(|values|
-            values.iter().any(|value| value.as_string() == Some(prefix))) {
-            bail!("Watch profile App ID prefix is not authorized by the profile");
-        }
+    let prefixes = profile.get("ApplicationIdentifierPrefix").and_then(Value::as_array)
+        .ok_or_else(|| report!("Watch profile lacks an App ID prefix authorization list"))?;
+    if prefixes.is_empty() || !prefixes.iter().all(|value|
+        value.as_string().is_some_and(|value| !value.is_empty()))
+        || !prefixes.iter().any(|value| value.as_string() == Some(prefix)) {
+        bail!("Watch profile App ID prefix is not authorized by the profile");
     }
     if let Some(team) = expected_team {
         if !profile.get("TeamIdentifier").and_then(Value::as_array).is_some_and(|values|
