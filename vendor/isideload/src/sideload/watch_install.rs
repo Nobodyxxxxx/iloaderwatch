@@ -16,6 +16,9 @@ use tracing::{info, warn};
 
 use crate::{SideloadError as Error, sideload::bundle::Bundle};
 
+#[path = "watch_pairing.rs"]
+mod pairing;
+
 const WATCH_LOCKDOWN_PORT: u16 = 62078;
 const WATCH_LOCKDOWN_SERVICE: &str = "com.apple.mobile.lockdownd";
 const WATCH_ZIP_SERVICE: &str = "com.apple.streaming_zip_conduit";
@@ -26,7 +29,6 @@ const WATCH_INSTALL_INITIAL_RETRY_DELAY_MS: u64 = 400;
 const WATCH_INSTALL_MAX_RETRY_DELAY_MS: u64 = 2500;
 // Bounds include the library's otherwise unbounded pair() trust-dialog loop.
 const WATCH_IO_TIMEOUT: Duration = Duration::from_secs(15);
-const WATCH_PAIR_TIMEOUT: Duration = Duration::from_secs(90);
 const WATCH_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const WATCH_TRANSFER_TIMEOUT: Duration = Duration::from_secs(600);
 const WATCH_INSTALL_TIMEOUT: Duration = Duration::from_secs(180);
@@ -67,35 +69,10 @@ pub async fn install_watch_apps(
             "lockdown",
         )
         .await?;
-        let mut watch_lockdown = LockdownClient::new(watch_connection);
-
-        let watch_pairing = watch_io_for(WATCH_PAIR_TIMEOUT, watch_lockdown
-            .pair(
-                iphone_pairing.host_id.clone(),
-                iphone_pairing.system_buid.clone(),
-                Some(host_name),
-            ))
-            .await
-            .map_err(Error::IdeviceError)
-            .context("Failed to pair with the Apple Watch through companion proxy")?;
-
-        let legacy = watch_io_for(WATCH_IO_TIMEOUT, watch_lockdown
-            .start_session(&watch_pairing))
-            .await
-            .map_err(Error::IdeviceError)
-            .context("Failed to start Apple Watch lockdown session")?;
-
-        // A platform label is not proof that this profile authorizes the Watch
-        // actually selected by CompanionProxy. Validate its authenticated UDID
-        // before starting any zip service/upload; never substitute the phone ID.
-        let identity = watch_io_for(WATCH_IO_TIMEOUT,
-            watch_lockdown.get_value(Some("UniqueDeviceID"), None)).await
-            .map_err(Error::IdeviceError)
-            .context("Failed to read the authenticated Watch identity before profile validation")?;
-        let watch_udid = identity.as_string().filter(|id| !id.trim().is_empty())
-            .ok_or_else(|| report!("Authenticated Watch did not report a usable device identity"))?;
+        let (mut watch_lockdown, watch_pairing, legacy, watch_udid) =
+            pairing::authenticate(watch_connection, &iphone_pairing, host_name, "usb").await?;
         super::watch_profile::validate_install_profiles(
-            watch_apps, &[watch_udid.to_string()], None,
+            watch_apps, &[watch_udid], None,
         ).context("Provisioning profile does not authorize the active paired Watch; no Watch app bytes were uploaded")?;
 
         for watch_app in watch_apps {
@@ -142,35 +119,10 @@ pub async fn install_watch_apps_rsd(
             "lockdown",
         )
         .await?;
-        let mut watch_lockdown = LockdownClient::new(watch_connection);
-
-        let watch_pairing = watch_io_for(WATCH_PAIR_TIMEOUT, watch_lockdown
-            .pair(
-                iphone_pairing.host_id.clone(),
-                iphone_pairing.system_buid.clone(),
-                Some(host_name),
-            ))
-            .await
-            .map_err(Error::IdeviceError)
-            .context("Failed to pair with the Apple Watch through RSD companion proxy")?;
-
-        let legacy = watch_io_for(WATCH_IO_TIMEOUT, watch_lockdown
-            .start_session(&watch_pairing))
-            .await
-            .map_err(Error::IdeviceError)
-            .context("Failed to start Apple Watch lockdown session over RSD")?;
-
-        // A platform label is not proof that this profile authorizes the Watch
-        // actually selected by CompanionProxy. Validate its authenticated UDID
-        // before starting any zip service/upload; never substitute the phone ID.
-        let identity = watch_io_for(WATCH_IO_TIMEOUT,
-            watch_lockdown.get_value(Some("UniqueDeviceID"), None)).await
-            .map_err(Error::IdeviceError)
-            .context("Failed to read the authenticated Watch identity before profile validation")?;
-        let watch_udid = identity.as_string().filter(|id| !id.trim().is_empty())
-            .ok_or_else(|| report!("Authenticated Watch did not report a usable device identity"))?;
+        let (mut watch_lockdown, watch_pairing, legacy, watch_udid) =
+            pairing::authenticate(watch_connection, iphone_pairing, host_name, "rsd").await?;
         super::watch_profile::validate_install_profiles(
-            watch_apps, &[watch_udid.to_string()], None,
+            watch_apps, &[watch_udid], None,
         ).context("Provisioning profile does not authorize the active paired Watch; no Watch app bytes were uploaded")?;
 
         for watch_app in watch_apps {

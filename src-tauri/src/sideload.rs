@@ -5,12 +5,12 @@ use crate::{
     error::AppError,
     operation::Operation,
     pairing::{get_sidestore_info, place_file},
-    watch_transport::{PairedUsbPhone, WatchSource, WatchTransport, WATCH_HOST_NAME, contains_watch_app},
+    watch_transport::{PairedUsbPhone, WatchSource, WATCH_HOST_NAME, contains_watch_app},
 };
 use idevice::provider::UsbmuxdProvider;
 use isideload::{
     dev::{device_type::DeveloperDeviceType, devices::DevicesApi},
-    sideload::{application::SpecialApp, bundle::Bundle, install::install_app, sideloader::Sideloader, watch_install::install_watch_apps_rsd},
+    sideload::{application::SpecialApp, bundle::Bundle, install::install_app, sideloader::Sideloader, watch_install::install_watch_apps},
     util::callbacks::{ExtensionsBehaviorCallbackBox, MaxCertsCallbackBox},
 };
 use tauri::{AppHandle, Manager, State, Window};
@@ -109,8 +109,11 @@ async fn sideload_watch(
         ));
     }
     let phone = PairedUsbPhone::authenticate(provider, &device.info.udid).await?;
-    let mut transport = WatchTransport::open(&phone).await?;
-    let watches = transport.paired_watch_udids(&device.info.udid).await?;
+    info!(target: "iloader_watch::diagnostic", stage = "phone_authenticated", transport = "usbmuxd", "Watch install stage completed");
+    // Match the reference fork's USB route. A successful CoreDeviceProxy/RSD
+    // check-in does not prove that a forwarded Watch lockdown port is reachable.
+    // There is no automatic transport fallback or second phone installation.
+    let watches = phone.paired_watch_udids(&device.info.udid).await?;
 
     let team = sideloader.get_team().await?;
     let expected_team_id = team.team_id.clone();
@@ -158,13 +161,12 @@ async fn sideload_watch(
 
     // Library I/O/retry deadlines are bounded and include async forwarding
     // teardown. Do NOT wrap this in timeout(): cancellation would skip teardown.
-    install_watch_apps_rsd(
-        &mut transport.provider,
-        &mut transport.handshake,
-        phone.pairing(),
+    info!(target: "iloader_watch::diagnostic", stage = "iphone_installed", transport = "usbmuxd", "Watch install stage completed");
+    install_watch_apps(
+        &phone,
         signed_bundle.watch_apps(),
         WATCH_HOST_NAME,
-        |progress| info!("Installing Apple Watch companion over RSD: {}%", progress),
+        |progress| info!(target: "iloader_watch::diagnostic", stage = "watch_install_progress", progress, "Watch installation progress"),
     ).await.map_err(|e| AppError::Misc(format!(
         "[iPhoneInstalledWatchFailed] iPhone installation completed, but Apple Watch installation failed. The installed iPhone app was kept; no existing Watch app was uninstalled. Unlock the Watch, keep it near the iPhone, and retry. Details: {e}",
     )))?;

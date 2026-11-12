@@ -60,10 +60,10 @@ pub fn run() {
                 .with_writer(file_appender)
                 .with_target(true)
                 .with_ansi(false)
-                .with_filter(tracing_subscriber::filter::LevelFilter::DEBUG);
+                .with_filter(tracing_subscriber::filter::filter_fn(logging::safe_log_metadata));
 
             let frontend_layer = logging::FrontendLoggingLayer::new(app.handle().clone())
-                .with_filter(tracing_subscriber::filter::LevelFilter::DEBUG);
+                .with_filter(tracing_subscriber::filter::filter_fn(logging::safe_log_metadata));
 
             Registry::default()
                 .with(file_layer)

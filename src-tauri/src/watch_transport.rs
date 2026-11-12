@@ -1,5 +1,5 @@
-//! On-demand USB -> CoreDeviceProxy -> userspace TCP/RSD transport for Watch IPAs.
-//! No saved-login, Wi-Fi discovery, renewal, or platform tunnel driver is involved.
+//! On-demand authenticated USB -> CompanionProxy transport for Watch IPAs.
+//! No RSD tunnel, saved-login, Wi-Fi discovery or background renewal is involved.
 use std::{
     fmt,
     future::Future,
@@ -9,22 +9,17 @@ use std::{
 };
 
 use idevice::{
-    Idevice, IdeviceError, IdeviceService, RsdService,
+    Idevice, IdeviceError, IdeviceService,
     companion_proxy::CompanionProxy,
-    core_device_proxy::CoreDeviceProxy,
     lockdown::LockdownClient,
     pairing_file::PairingFile,
     provider::{IdeviceProvider, UsbmuxdProvider},
-    rsd::RsdHandshake,
-    tcp::handle::AdapterHandle,
 };
 
 use crate::error::AppError;
 
 pub(crate) const WATCH_HOST_NAME: &str = "iloader";
 const IO_TIMEOUT: Duration = Duration::from_secs(15);
-const TUNNEL_TIMEOUT: Duration = Duration::from_secs(30);
-const COMPANION_RSD_SERVICE: &str = "com.apple.companion_proxy.shim.remote";
 
 fn transport_error(context: &str, error: impl fmt::Display) -> AppError {
     AppError::RemotePairing(format!("{context}: {error}"))
@@ -76,9 +71,6 @@ impl PairedUsbPhone {
         Ok(phone)
     }
 
-    pub(crate) fn pairing(&self) -> &PairingFile {
-        &self.pairing
-    }
 }
 
 impl IdeviceProvider for PairedUsbPhone {
@@ -101,57 +93,24 @@ impl IdeviceProvider for PairedUsbPhone {
     }
 }
 
-/// Own the handle for the entire install; dropping it closes the software tunnel.
-/// There are no detached host tasks, OS routes, TUN adapters, or forwarding ports
-/// here. Watch forwarding lifetimes/teardown belong to install_watch_apps_rsd.
-pub(crate) struct WatchTransport {
-    pub(crate) provider: AdapterHandle,
-    pub(crate) handshake: RsdHandshake,
-}
-
-impl WatchTransport {
-    pub(crate) async fn open(phone: &PairedUsbPhone) -> Result<Self, AppError> {
-        tokio::time::timeout(TUNNEL_TIMEOUT, async {
-            // This service authenticates through lockdown using the existing USB
-            // pair record; do not generate/persist a second RemotePairing identity.
-            let proxy = CoreDeviceProxy::connect(phone).await?;
-            let rsd_port = proxy.tunnel_info().server_rsd_port;
-            let adapter = proxy.create_software_tunnel()?;
-            let mut provider = adapter.to_async_handle();
-            let stream = provider.connect(rsd_port).await?;
-            let handshake = RsdHandshake::new(stream).await?;
-            if !handshake.services.contains_key(COMPANION_RSD_SERVICE) {
-                return Err(IdeviceError::UnexpectedResponse(
-                    "USB RSD did not advertise CompanionProxy; unlock the iPhone, enable Developer Mode, and reconnect over USB".into(),
-                ));
-            }
-            Ok::<Self, IdeviceError>(Self { provider, handshake })
-        })
-        .await
-        .map_err(|e| transport_error("Opening the USB Watch RSD tunnel timed out", e))?
-        .map_err(|e| transport_error("Unable to open the USB Watch RSD tunnel", e))
-    }
-
-    /// Read-only registry query, at most three attempts while the paired Watch
-    /// comes online. Never substitute the phone's UDID or invent a Watch UDID.
+/// Direct USB CompanionProxy, matching the reference fork's USB route.
+/// No CoreDeviceProxy tunnel is opened and no transport is silently retried.
+impl PairedUsbPhone {
     pub(crate) async fn paired_watch_udids(
-        &mut self,
+        &self,
         phone_udid: &str,
     ) -> Result<Vec<String>, AppError> {
         for attempt in 0..3 {
             let registry = tokio::time::timeout(IO_TIMEOUT, async {
-                let mut companion = CompanionProxy::connect_rsd(
-                    &mut self.provider,
-                    &mut self.handshake,
-                )
-                .await?;
+                let mut companion = CompanionProxy::connect(self).await?;
                 companion.get_device_registry().await
             })
             .await
-            .map_err(|e| transport_error("Reading the paired Watch registry timed out", e))?
-            .map_err(|e| transport_error("Unable to read the paired Watch registry over RSD", e))?;
+            .map_err(|e| transport_error("Reading the paired Watch registry over USB timed out", e))?
+            .map_err(|e| transport_error("Unable to read the paired Watch registry over USB", e))?;
             let watches = validate_watch_registry(registry, phone_udid)?;
             if !watches.is_empty() {
+                tracing::info!(target: "iloader_watch::diagnostic", stage = "watch_registry", transport = "usbmuxd", count = watches.len(), "Watch registry is available");
                 return Ok(watches);
             }
             if attempt < 2 {
@@ -159,8 +118,8 @@ impl WatchTransport {
             }
         }
         Err(transport_error(
-            "No paired Apple Watch was reported by the iPhone",
-            "unlock the Watch and keep it near the USB-connected iPhone",
+            "No paired Apple Watch was reported by the USB-connected iPhone",
+            "unlock the Watch and keep it near the iPhone",
         ))
     }
 }

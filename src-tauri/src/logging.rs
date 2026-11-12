@@ -4,6 +4,39 @@ use tauri::{AppHandle, Emitter};
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::{Layer, registry::LookupSpan};
 
+pub fn safe_log_metadata(metadata: &tracing::Metadata<'_>) -> bool {
+    safe_log_target(metadata.target(), *metadata.level())
+}
+
+fn safe_log_target(target: &str, level: tracing::Level) -> bool {
+    // idevice DEBUG prints complete PairRecord/GetValue request/response plists.
+    // Never require users to share those for diagnosis. Fixed-label Watch
+    // stages use iloader_watch::diagnostic and are intentionally still visible.
+    let protocol = ["idevice", "isideload", "apple_codesign", "keyring", "reqwest",
+        "reqwest_middleware", "hyper", "h2", "rustls", "tungstenite", "tokio_tungstenite"]
+        .iter().any(|prefix| target == *prefix || target.strip_prefix(prefix).is_some_and(|tail| tail.starts_with("::")));
+    level <= tracing::Level::DEBUG && !(protocol && level > tracing::Level::WARN)
+}
+
+#[cfg(test)]
+mod privacy_tests {
+    use super::*;
+    #[test]
+    fn raw_protocol_plist_logs_are_suppressed_but_fixed_stage_logs_remain() {
+        for target in ["idevice", "idevice::services::lockdown", "isideload::auth", "reqwest::client", "keyring"] {
+            assert!(!safe_log_target(target, tracing::Level::DEBUG));
+            assert!(!safe_log_target(target, tracing::Level::INFO));
+            assert!(safe_log_target(target, tracing::Level::ERROR));
+        }
+        assert!(safe_log_target("iloader_watch::diagnostic", tracing::Level::INFO));
+    }
+    #[test]
+    fn target_filter_uses_component_boundaries_and_never_enables_trace() {
+        assert!(safe_log_target("idevice_other", tracing::Level::DEBUG));
+        assert!(!safe_log_target("iloader_watch::diagnostic", tracing::Level::TRACE));
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtendedLogRecord {
     pub level: u8,
